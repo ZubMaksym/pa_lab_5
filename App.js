@@ -1,14 +1,13 @@
 // ---------------------------------------------
-//  Artificial Bee Colony (ABC) for Graph Coloring
-//  Node.js implementation
-//  Variant: 250 vertices, degree <= 25, >= 2
+//  ABC Graph Coloring
+//  250 vertices, degree <= 25 >= 2
 //  35 bees: 3 scouts, others employed + onlooker
 // ---------------------------------------------
 
-const N = 250;                // number of vertices
+const N = 250;
 const MAX_DEG = 25;
 const MIN_DEG = 2;
-const FOOD_SOURCES = 16;      // number of solutions in population
+const FOOD_SOURCES = 16;
 const EMPLOYED = 16;
 const ONLOOKERS = 16;
 const SCOUTS = 3;
@@ -16,9 +15,6 @@ const ITERATIONS = 1000;
 const RECORD_STEP = 20;
 const TRIAL_LIMIT = 100;
 
-// ---------------------------------------------
-// ----------- GRAPH GENERATION -----------------
-// ---------------------------------------------
 
 function generateGraph(n, minDeg, maxDeg) {
     const edges = Array.from({ length: n }, () => new Set());
@@ -40,13 +36,10 @@ function generateGraph(n, minDeg, maxDeg) {
 
 const graph = generateGraph(N, MIN_DEG, MAX_DEG);
 
-// ---------------------------------------------
-// -------- SOLUTION REPRESENTATION -------------
-// ---------------------------------------------
 
 function randomColoring() {
     const colors = new Array(N);
-    const maxColors = Math.floor(Math.random() * 10) + 3; // 3..12 colors
+    const maxColors = Math.floor(Math.random() * 10) + 3;
 
     for (let i = 0; i < N; i++) {
         colors[i] = Math.floor(Math.random() * maxColors);
@@ -63,9 +56,8 @@ function evaluate(colors) {
             if (colors[v] === colors[u]) conflicts++;
         }
     }
-    conflicts /= 2; // counted twice
+    conflicts /= 2;
 
-    // objective: minimize conflicts first, then number of colors
     return conflicts * 100 + usedColors.size;
 }
 
@@ -73,9 +65,6 @@ function clone(arr) {
     return arr.slice();
 }
 
-// ---------------------------------------------
-// ----------- NEIGHBOR (local search) ----------
-// ---------------------------------------------
 
 function mutate(colors) {
     const v = Math.floor(Math.random() * N);
@@ -83,10 +72,6 @@ function mutate(colors) {
     newColors[v] = Math.floor(Math.random() * 10);
     return newColors;
 }
-
-// ---------------------------------------------
-// ----------------- ABC CORE ------------------
-// ---------------------------------------------
 
 let solutions = Array.from({ length: FOOD_SOURCES }, () => ({
     colors: randomColoring(),
@@ -97,7 +82,6 @@ let solutions = Array.from({ length: FOOD_SOURCES }, () => ({
 solutions.forEach(s => s.fitness = evaluate(s.colors));
 let best = solutions.reduce((a, b) => a.fitness < b.fitness ? a : b);
 
-// track progress
 let history = [];
 
 console.log("Starting ABC...");
@@ -105,7 +89,6 @@ console.log("Initial best =", best.fitness);
 
 for (let iter = 1; iter <= ITERATIONS; iter++) {
 
-    // --- EMPLOYED bees improve their own sources ---
     for (let i = 0; i < EMPLOYED; i++) {
         const s = solutions[i];
         const newColors = mutate(s.colors);
@@ -121,7 +104,6 @@ for (let iter = 1; iter <= ITERATIONS; iter++) {
         }
     }
 
-    // --- ONLOOKER bees choose better food sources ---
     for (let i = 0; i < ONLOOKERS; i++) {
         const pick = Math.floor(Math.random() * FOOD_SOURCES);
         const s = solutions[pick];
@@ -139,7 +121,6 @@ for (let iter = 1; iter <= ITERATIONS; iter++) {
         }
     }
 
-    // --- SCOUT bees replace stagnated sources ---
     for (let i = 0; i < SCOUTS; i++) {
         let worst = solutions.reduce((a, b) => a.fitness > b.fitness ? a : b);
         if (worst.trials >= TRIAL_LIMIT) {
@@ -149,7 +130,6 @@ for (let iter = 1; iter <= ITERATIONS; iter++) {
         }
     }
 
-    // record quality every RECORD_STEP iterations
     if (iter % RECORD_STEP === 0) {
         history.push({ iter, fitness: best.fitness });
         console.log(`Iter ${iter} → best = ${best.fitness}`);
@@ -159,6 +139,54 @@ for (let iter = 1; iter <= ITERATIONS; iter++) {
 console.log("\n=========== RESULT ===========");
 console.log("Best solution fitness =", best.fitness);
 console.log("Colors used =", new Set(best.colors).size);
-console.log("Conflicts =", Math.floor(best.fitness / 100)); // conflicts*100 + colors
+console.log("Conflicts =", Math.floor(best.fitness / 100));
 console.log("\nCollected metrics:", history);
 console.log("==============================");
+
+const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
+const fs = require('fs');
+
+async function buildChart() {
+    const width = 1000;
+    const height = 600;
+    const chartJSNodeCanvas = new ChartJSNodeCanvas({ width, height });
+
+    const labels = history.map(h => h.iter);
+    const values = history.map(h => h.fitness);
+
+    const configuration = {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Fitness over iterations',
+                data: values,
+                borderWidth: 2,
+                tension: 0.2
+            }]
+        },
+        options: {
+            plugins: {
+                title: {
+                    display: true,
+                    text: "Залежність значення цільової функції від кількості ітерацій"
+                }
+            },
+            scales: {
+                x: {
+                    title: { display: true, text: "Ітерація" }
+                },
+                y: {
+                    title: { display: true, text: "Фітнес (якість розвʼязку)" }
+                }
+            }
+        }
+    };
+
+    const buffer = await chartJSNodeCanvas.renderToBuffer(configuration);
+    fs.writeFileSync("abc_fitness_chart.png", buffer);
+
+    console.log("Графік збережено у файлі abc_fitness_chart.png");
+}
+
+buildChart();
